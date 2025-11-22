@@ -13,7 +13,7 @@ PASSWORD = "Solar_panel/1234"
 CLIENT_ID = "terminal-test-client"
 
 # Panel ID to test (matches dashboard default)
-PANEL_ID = "P-TEST-8"
+PANEL_ID = "P-TEST-1"
 
 def generate_panel_data():
     """Generate realistic sensor data for testing."""

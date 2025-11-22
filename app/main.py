@@ -153,7 +153,7 @@ def test_mqtt():
 
 # ============ Enregistrement des routes ============
 app.include_router(auth_routes.router)
-# app.include_router(mqtt_routes.router)
+app.include_router(mqtt_routes.router)
 
 # Enregistrer les autres routes si elles existent
 if hasattr(panel_routes, 'router'):

@@ -187,77 +187,11 @@ def get_panel_history(
         # Simulate email for testing
         email = "test@example.com"
 
-        # Mock prediction history data
-        mock_predictions = {
-            "panel1": [
-                {
-                    "id": "pred-1",
-                    "panel_id": "panel1",
-                    "predicted_class": "clean",
-                    "confidence": 0.95,
-                    "status": "clean",
-                    "confidence_level": "high",
-                    "processing_time_ms": 245,
-                    "image_url": "https://via.placeholder.com/400x300?text=panel1",
-                    "timestamp": "2025-11-21T07:42:00.000Z",
-                    "all_classes_sorted": [
-                        {"class_name": "clean", "probability": 0.95},
-                        {"class_name": "dirty", "probability": 0.05}
-                    ]
-                },
-                {
-                    "id": "pred-2",
-                    "panel_id": "panel1",
-                    "predicted_class": "clean",
-                    "confidence": 0.92,
-                    "status": "clean",
-                    "confidence_level": "high",
-                    "processing_time_ms": 238,
-                    "image_url": "https://via.placeholder.com/400x300?text=panel1",
-                    "timestamp": "2025-11-21T07:35:00.000Z",
-                    "all_classes_sorted": [
-                        {"class_name": "clean", "probability": 0.92},
-                        {"class_name": "dirty", "probability": 0.08}
-                    ]
-                }
-            ],
-            "P-TEST-8": [
-                {
-                    "id": "pred-3",
-                    "panel_id": "P-TEST-8",
-                    "predicted_class": "dirty",
-                    "confidence": 0.88,
-                    "status": "dirty",
-                    "confidence_level": "high",
-                    "processing_time_ms": 252,
-                    "image_url": "https://via.placeholder.com/400x300?text=P-TEST-8",
-                    "timestamp": "2025-11-21T07:40:00.000Z",
-                    "all_classes_sorted": [
-                        {"class_name": "dirty", "probability": 0.88},
-                        {"class_name": "clean", "probability": 0.12}
-                    ]
-                }
-            ],
-            "P-TEST-10": [
-                {
-                    "id": "pred-4",
-                    "panel_id": "P-TEST-10",
-                    "predicted_class": "clean",
-                    "confidence": 0.92,
-                    "status": "clean",
-                    "confidence_level": "high",
-                    "processing_time_ms": 241,
-                    "image_url": "https://via.placeholder.com/400x300?text=P-TEST-10",
-                    "timestamp": "2025-11-21T07:38:00.000Z",
-                    "all_classes_sorted": [
-                        {"class_name": "clean", "probability": 0.92},
-                        {"class_name": "dirty", "probability": 0.08}
-                    ]
-                }
-            ]
-        }
-
-        predictions = mock_predictions.get(panel_id, [])[:limit]
+        # Récupérer les prédictions depuis Firestore
+        predictions = FirestoreService.get_predictions(
+            panel_id=panel_id,
+            limit=limit
+        )
 
         response = PredictionHistoryResponse(
             predictions=predictions,
@@ -265,7 +199,7 @@ def get_panel_history(
             has_more=len(predictions) >= limit
         )
 
-        logger.info(f"Mock historique du panneau {panel_id} récupéré: {len(predictions)} prédictions")
+        logger.info(f"Historique du panneau {panel_id} récupéré depuis Firestore: {len(predictions)} prédictions")
 
         return response
 
