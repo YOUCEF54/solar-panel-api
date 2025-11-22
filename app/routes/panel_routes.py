@@ -1,7 +1,6 @@
 from fastapi import APIRouter, HTTPException, status
 from app.core.firebase_client import db
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
+from typing import List, Dict, Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -9,59 +8,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/panels", tags=["Panels"])
 
 
-def merge_panel_data(sensor_data: Dict[str, Any], dl_data: Dict[str, Any]) -> Dict[str, Any]:
-    """
-    Merge sensor data and DL prediction data for a panel.
 
-    Args:
-        sensor_data: Latest sensor data from solar_panel_data collection
-        dl_data: Latest DL prediction data from dl_predictions collection
-
-    Returns:
-        Merged data dictionary
-    """
-    merged = dict(sensor_data)  # Start with sensor data
-
-    # Add DL prediction data
-    if dl_data:
-        merged.update({
-            "dl_prediction": dl_data.get("predicted_class"),
-            "dl_confidence": dl_data.get("confidence"),
-            "dl_status": dl_data.get("status"),
-            "dl_probability": dl_data.get("probability", {}),
-            "dl_class_probabilities": dl_data.get("class_probabilities", {}),
-            "dl_predicted_class_index": dl_data.get("predicted_class_index"),
-            "dl_confidence_level": dl_data.get("confidence_level"),
-            "dl_all_classes_sorted": dl_data.get("all_classes_sorted", []),
-            "dl_processing_time_ms": dl_data.get("processing_time_ms"),
-            "dl_timestamp": dl_data.get("timestamp"),
-            "image_url": dl_data.get("image_url"),  # Use DL image URL if available
-        })
-
-    return merged
-
-
-class PanelResponse(BaseModel):
-    panel_id: str
-    last_status: str
-    last_confidence: float
-    thumbnail: Optional[str] = None
-    last_update: str
-    temperature: Optional[float] = None
-    humidity: Optional[float] = None
-    light: Optional[float] = None
 
 
 @router.get(
     "",
-    response_model=List[PanelResponse],
+    response_model=List[List[Dict[str, Any]]],
     summary="Récupérer tous les panneaux",
-    responses={200: {"description": "Liste des panneaux"}}
+    responses={200: {"description": "Liste des panneaux avec données détaillées"}}
 )
 def get_panels():
     """
     Récupère tous les panneaux et leurs dernières données depuis Firestore.
-    Combine les données des capteurs (solar_panel_data) et les prédictions DL (dl_predictions).
+    Retourne un tableau où chaque panneau est représenté par un tableau contenant
+    les données DL et capteurs séparées.
     """
     try:
         if db is None:
@@ -94,34 +54,62 @@ def get_panels():
                 if panel_id not in dl_data or current_timestamp > dl_data[panel_id].get("timestamp", ""):
                     dl_data[panel_id] = data
 
-        # Merge data for each panel
-        merged_panels = {}
-        for panel_id in set(sensor_data.keys()) | set(dl_data.keys()):
-            sensor = sensor_data.get(panel_id, {})
-            dl = dl_data.get(panel_id, {})
-            merged_panels[panel_id] = merge_panel_data(sensor, dl)
-
-        # Convert to PanelResponse format
+        # Build response array for each panel
         panels = []
-        for panel_id, data in merged_panels.items():
-            # Determine the best status to show (prefer DL if available, fallback to ML)
-            status = data.get("dl_status") or data.get("ml_prediction") or "unknown"
-            confidence = data.get("dl_confidence") or data.get("ml_confidence") or 0.0
+        for panel_id in set(sensor_data.keys()) | set(dl_data.keys()):
+            panel_response = []
 
-            panels.append(
-                PanelResponse(
-                    panel_id=panel_id,
-                    last_status=status,
-                    last_confidence=float(confidence),
-                    thumbnail=data.get("image_url") or f"https://via.placeholder.com/400x300?text={panel_id}",
-                    last_update=data.get("dl_timestamp") or data.get("timestamp", ""),
-                    temperature=data.get("temperature"),
-                    humidity=data.get("humidity"),
-                    light=data.get("light")
-                )
-            )
+            # Add DL prediction data if available
+            dl = dl_data.get(panel_id)
+            if dl:
+                dl_object = {
+                    "all_classes_sorted": dl.get("all_classes_sorted", []),
+                    "class_probabilities": dl.get("class_probabilities", {}),
+                    "confidence": dl.get("confidence"),
+                    "confidence_level": dl.get("confidence_level"),
+                    "created_at": dl.get("created_at"),
+                    "image_url": dl.get("image_url"),
+                    "panel_id": dl.get("panel_id"),
+                    "predicted_class": dl.get("predicted_class"),
+                    "predicted_class_index": dl.get("predicted_class_index"),
+                    "probability": dl.get("probability", {}),
+                    "processing_time_ms": dl.get("processing_time_ms"),
+                    "status": dl.get("status"),
+                    "timestamp": dl.get("timestamp")
+                }
+                panel_response.append(dl_object)
 
-        logger.info(f"✅ Returned {len(panels)} panels with merged data from Firestore")
+            # Add sensor data if available
+            sensor = sensor_data.get(panel_id)
+            if sensor:
+                sensor_object = {
+                    "B": sensor.get("B"),
+                    "G": sensor.get("G"),
+                    "R": sensor.get("R"),
+                    "battery_level": sensor.get("battery_level"),
+                    "device_status": sensor.get("device_status"),
+                    "dl_confidence": None,
+                    "dl_prediction": None,
+                    "dl_status": None,
+                    "humidity": sensor.get("humidity"),
+                    "last_maintenance": sensor.get("last_maintenance"),
+                    "light": sensor.get("light"),
+                    "ml_confidence": sensor.get("ml_confidence"),
+                    "ml_prediction": sensor.get("ml_prediction"),
+                    "ml_probability": sensor.get("ml_probability", {}),
+                    "panel_id": sensor.get("panel_id"),
+                    "temperature": sensor.get("temperature"),
+                    "timestamp": sensor.get("timestamp"),
+                    "topic": sensor.get("topic"),
+                    "water_level": sensor.get("water_level")
+                }
+                panel_response.append(sensor_object)
+
+            # Only add panels that have at least some data
+            if panel_response:
+                panels.append(panel_response)
+
+        logger.info(f"✅ Returned {len(panels)} panels with detailed merged data from Firestore")
         return panels
 
     except Exception as e:

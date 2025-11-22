@@ -33,6 +33,12 @@ class PublishCommandRequest(BaseModel):
     params: Optional[Dict[str, Any]] = Field(None, description="Paramètres de la commande")
 
 
+class SendCleaningCommandRequest(BaseModel):
+    """Schéma pour envoyer une commande de nettoyage."""
+    device_id: str = Field(..., description="ID de l'appareil ESP32")
+    final_state: str = Field(..., description="État final attendu (dirty/clean)")
+
+
 class SubscribeTopicRequest(BaseModel):
     """Schéma pour s'abonner à un topic."""
     topic: str = Field(..., description="Topic MQTT (peut contenir des wildcards)")
@@ -188,6 +194,72 @@ def send_command(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erreur lors de l'envoi de la commande"
+        )
+
+
+@router.post(
+    "/cleaning-command",
+    summary="Envoyer une commande de nettoyage à un ESP32",
+    responses={
+        200: {"description": "Commande de nettoyage envoyée"},
+        401: {"description": "Non authentifié"},
+        503: {"description": "Broker MQTT non disponible"}
+    }
+)
+def send_cleaning_command(
+    request: SendCleaningCommandRequest,
+    # email: str = Depends(get_current_user_email)  # Temporarily disabled for testing
+):
+    """
+    Envoie une commande de nettoyage à un appareil ESP32 via MQTT.
+
+    - **device_id**: L'ID de l'appareil ESP32 (ex: esp32_panel_01)
+    - **final_state**: L'état final attendu (dirty/clean)
+    """
+    try:
+        from datetime import datetime
+        import json
+
+        client = get_mqtt_client()
+
+        if not client.is_connected():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Broker MQTT non disponible"
+            )
+
+        # Créer la commande selon le format demandé
+        command = {
+            "action": "start_clean",
+            "final_state": request.final_state,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+
+        # Publier sur le topic panel/commands/{device_id}
+        topic = f"panel/commands/{request.device_id}"
+        success = client.publish(topic, command)
+
+        if success:
+            logger.info(f"Commande de nettoyage '{command['action']}' envoyée à {request.device_id} (état final: {request.final_state})")
+            return {
+                "success": True,
+                "message": f"Commande de nettoyage envoyée à {request.device_id}",
+                "device_id": request.device_id,
+                "command": command
+            }
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Impossible d'envoyer la commande de nettoyage"
+            )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Erreur lors de l'envoi de la commande de nettoyage: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erreur lors de l'envoi de la commande de nettoyage"
         )
 
 
